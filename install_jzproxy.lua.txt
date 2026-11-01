@@ -1,0 +1,146 @@
+local FILES = {
+    {
+        name = "JzProxy.lua_enc",
+        url = "https://raw.githubusercontent.com/JzuvGTI/rehan/refs/heads/main/JzProxy.lua_enc"
+    },
+    {
+        name = "Loaders_JzProxy.lua",
+        url = "https://raw.githubusercontent.com/JzuvGTI/rehan/refs/heads/main/Loaders_JzProxy.lua"
+    }
+}
+
+local function console(msg)
+    LogToConsole(msg)
+end
+
+local function overlay(msg)
+    SendVariantList({
+        [0] = "OnTextOverlay",
+        [1] = msg
+    })
+end
+
+local function is_android()
+    return os.getenv("ANDROID_ROOT") or os.getenv("ANDROID_DATA")
+end
+
+local function get_script_dir()
+    if is_android() then
+        local external = os.getenv("EXTERNAL_STORAGE") or "/sdcard"
+        return external .. "/Android/media/com.rtsoft.growtopia/scripts"
+    end
+
+    local localappdata = os.getenv("LOCALAPPDATA")
+    if localappdata and localappdata ~= "" then
+        return localappdata .. "\\Growtopia\\scripts"
+    end
+
+    local userprofile = os.getenv("USERPROFILE")
+    if userprofile and userprofile ~= "" then
+        return userprofile .. "\\AppData\\Local\\Growtopia\\scripts"
+    end
+
+    return nil
+end
+
+
+local function file_exists(path)
+    local f = io.open(path, "rb")
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
+local function write_file(path, content)
+    local f, err = io.open(path, "wb")
+    if not f then
+        return false, err or "failed_to_open_file"
+    end
+
+    f:write(content)
+    f:close()
+    return true
+end
+
+local function download_file(url)
+    local ok, response = pcall(MakeRequest, url, "GET")
+    if not ok or not response then
+        return false, "request_failed"
+    end
+
+    if response.error and response.error ~= "" then
+        return false, response.error
+    end
+
+    if type(response.content) ~= "string" or response.content == "" then
+        return false, "empty_content"
+    end
+
+    return true, response.content
+end
+
+local function install_files()
+    local script_dir = get_script_dir()
+    if not script_dir then
+        overlay("`4Cannot detect script directory")
+        console("`4[Installer] Cannot detect script directory.")
+        return
+    end
+
+    console("`2[Installer] Target path: `w" .. script_dir)
+    overlay("`9Installing JzProxy...")
+
+    for _, item in ipairs(FILES) do
+        local target_path
+        if is_android() then
+            target_path = script_dir .. "/" .. item.name
+        else
+            target_path = script_dir .. "\\" .. item.name
+        end
+
+        console("`9[Installer] Downloading: `w" .. item.name)
+
+        local ok, result = download_file(item.url)
+        if not ok then
+            overlay("`4Failed downloading " .. item.name)
+            console("`4[Installer] Download failed for `w" .. item.name .. " `4=> `w" .. tostring(result))
+            return
+        end
+
+        local save_ok, save_err = write_file(target_path, result)
+        if not save_ok then
+            overlay("`4Failed saving " .. item.name)
+            console("`4[Installer] Save failed for `w" .. item.name .. " `4=> `w" .. tostring(save_err))
+            return
+        end
+
+        console("`2[Installer] Saved: `w" .. target_path)
+    end
+
+    Sleep(1000)
+
+    local main_file
+    if is_android() then
+        main_file = script_dir .. "/JzProxy.lua_enc"
+    else
+        main_file = script_dir .. "\\JzProxy.lua_enc"
+    end
+
+    if not file_exists(main_file) then
+        overlay("`4JzProxy.lua_enc not found after install")
+        console("`4[Installer] Verification failed: JzProxy.lua_enc not found.")
+        return
+    end
+
+    overlay("`2JzProxy installed successfully")
+    console("`2[Installer] Verification success. Loading encrypted file...")
+
+    LoadEncryptedFile("JzProxy.lua_enc")
+end
+
+RunThread(function()
+    install_files()
+end)
+
